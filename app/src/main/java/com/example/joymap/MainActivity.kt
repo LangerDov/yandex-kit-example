@@ -33,7 +33,7 @@ import com.yandex.mapkit.search.ToponymObjectMetadata
 import com.yandex.runtime.Error
 import com.yandex.runtime.image.ImageProvider
 
-class MainActivity : AppCompatActivity(), CameraListener {
+class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var mapObjectCollection: MapObjectCollection // Коллекция различных объектов на карте
     private lateinit var placemarkMapObject: PlacemarkMapObject // Геопозиционированный объект (метка со значком) на карте
@@ -41,88 +41,29 @@ class MainActivity : AppCompatActivity(), CameraListener {
     private var zoomValue: Float = 16.5f // Величина зума
     lateinit var searchManager: SearchManager
     lateinit var searchSession: Session
-
     private val mapObjectTapListener = MapObjectTapListener { mapObject, point ->
         Toast.makeText(applicationContext, "Эрмитаж — музей изобразительных искусств", Toast.LENGTH_SHORT).show()
         true
     }
-
-    private val geoObjectTapListener = object : GeoObjectTapListener {
-        override fun onObjectTap(geoObjectTapEvent: GeoObjectTapEvent): Boolean {
-            val selectionMetadata: GeoObjectSelectionMetadata = geoObjectTapEvent
-                .geoObject
-                .metadataContainer
-                .getItem(GeoObjectSelectionMetadata::class.java)
-            binding.mapview.map.selectGeoObject(selectionMetadata.id, selectionMetadata.layerId)
-            return false
-        }
-    }
-
-    private val searchListener = object : Session.SearchListener {
-        override fun onSearchResponse(response: Response) {
-            val street = response.collection.children.firstOrNull()?.obj
-                ?.metadataContainer
-                ?.getItem(ToponymObjectMetadata::class.java)
-                ?.address
-                ?.components
-                ?.firstOrNull { it.kinds.contains(Address.Component.Kind.STREET) }
-                ?.name ?: "Информация об улице не найдена"
-
-            Toast.makeText(applicationContext, street, Toast.LENGTH_SHORT).show()
-        }
-
-        override fun onSearchError(p0: Error) {}
-    }
-
-    private val inputListener = object : InputListener {
-        override fun onMapTap(map: Map, point: Point) {
-            searchSession = searchManager.submit(point, 20, SearchOptions(), searchListener)
-        }
-
-        override fun onMapLongTap(map: Map, point: Point) {}
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setApiKey(savedInstanceState) // Проверяем: был ли уже ранее установлен API-ключ в приложении. Если нет - устанавливаем его.
         MapKitFactory.initialize(this) // Инициализация библиотеки для загрузки необходимых нативных библиотек.
         binding = ActivityMainBinding.inflate(layoutInflater) // Раздуваем макет только после того, как установили API-ключ
         setContentView(binding.root) // Размещаем пользовательский интерфейс в экране активности
+
         moveToStartLocation() // Перемещаем камеру в определенную область на карте
         setMarkerInStartLocation() // Устанавливаем маркер на карте
-        binding.mapview.map.addCameraListener(this) // Добавляем карте слушатель камеры для слежки за изменением величины зума
-        binding.mapview.map.addTapListener(geoObjectTapListener) // Добавляем слушатель тапов по объектам
-        searchManager = SearchFactory.getInstance().createSearchManager(SearchManagerType.ONLINE) // Инициализирует поисковый менеджер
-        binding.mapview.map.addInputListener(inputListener) // Добавляем слушатель тапов по карте с извлечением информации
     }
 
-    override fun onCameraPositionChanged(
-        map: Map,
-        cameraPosition: CameraPosition,
-        cameraUpdateReason: CameraUpdateReason,
-        finished: Boolean
-    ) {
-        if (finished) { // Если камера закончила движение
-            when {
-                cameraPosition.zoom >= ZOOM_BOUNDARY && zoomValue <= ZOOM_BOUNDARY -> {
-                    placemarkMapObject.setIcon(ImageProvider.fromBitmap(createBitmapFromVector(R.drawable.ic_pin_blue_svg)))
-                }
-                cameraPosition.zoom <= ZOOM_BOUNDARY && zoomValue >= ZOOM_BOUNDARY -> {
-                    placemarkMapObject.setIcon(ImageProvider.fromBitmap(createBitmapFromVector(R.drawable.ic_pin_red_svg)))
-                }
-            }
-            zoomValue = cameraPosition.zoom // После изменения позиции камеры сохраняем величину зума
-        }
+    private fun setApiKey(savedInstanceState: Bundle?) {
+            MapKitFactory.setApiKey("3acec1e4-7330-400c-bbad-0e73b429e1ee") // API-ключ должен быть задан единожды перед инициализацией MapKitFactory
     }
 
-    private fun setMarkerInStartLocation() {
-        val marker = createBitmapFromVector(R.drawable.ic_pin_black_svg)
-        mapObjectCollection = binding.mapview.map.mapObjects // Инициализируем коллекцию различных объектов на карте
-        placemarkMapObject =
-            mapObjectCollection.addPlacemark(startLocation, ImageProvider.fromBitmap(marker)) // Добавляем метку со значком
-        placemarkMapObject.opacity = 0.5f // Устанавливаем прозрачность метке
-        placemarkMapObject.setText("Обязательно к посещению!") // Устанавливаем текст сверху метки
-        placemarkMapObject.addTapListener(mapObjectTapListener) //Добавляем слушатель клика на метку
+    // Если Activity уничтожается (например, при нехватке памяти или при повороте экрана) - сохраняем информацию, что API-ключ уже был получен ранее
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putBoolean("haveApiKey", true)
     }
 
     private fun createBitmapFromVector(art: Int): Bitmap? {
@@ -138,6 +79,16 @@ class MainActivity : AppCompatActivity(), CameraListener {
         return bitmap
     }
 
+
+    private fun setMarkerInStartLocation() {
+        val marker = createBitmapFromVector(R.drawable.ic_pin_black_svg)
+        mapObjectCollection = binding.mapview.map.mapObjects // Инициализируем коллекцию различных объектов на карте
+        placemarkMapObject =
+            mapObjectCollection.addPlacemark(startLocation, ImageProvider.fromBitmap(marker)) // Добавляем метку со значком
+        placemarkMapObject.opacity = 0.5f // Устанавливаем прозрачность метке
+        placemarkMapObject.setText("Обязательно к посещению!") // Устанавливаем текст сверху метки
+        placemarkMapObject.addTapListener(mapObjectTapListener) //Добавляем слушатель клика на метку
+    }
     private fun moveToStartLocation() {
         binding.mapview.map.move(
             CameraPosition(startLocation, zoomValue, 0.0f, 0.0f), // Позиция камеры
@@ -145,21 +96,7 @@ class MainActivity : AppCompatActivity(), CameraListener {
             null
         )
     }
-
-    private fun setApiKey(savedInstanceState: Bundle?) {
-        val haveApiKey = savedInstanceState?.getBoolean("haveApiKey") ?: false // При первом запуске приложения всегда false
-        if (!haveApiKey) {
-            MapKitFactory.setApiKey(MAPKIT_API_KEY) // API-ключ должен быть задан единожды перед инициализацией MapKitFactory
-        }
-    }
-
-    // Если Activity уничтожается (например, при нехватке памяти или при повороте экрана) - сохраняем информацию, что API-ключ уже был получен ранее
-    override fun onSaveInstanceState(outState: Bundle) {
-        super.onSaveInstanceState(outState)
-        outState.putBoolean("haveApiKey", true)
-    }
-
-    // Отображаем карты перед тем моментом, когда активити с картой станет видимой пользователю:
+    // Отображаем карты перед моментом, когда активити с картой станет видимой пользователю:
     override fun onStart() {
         super.onStart()
         MapKitFactory.getInstance().onStart()
@@ -174,7 +111,6 @@ class MainActivity : AppCompatActivity(), CameraListener {
     }
 
     companion object {
-        const val MAPKIT_API_KEY = "Ваш Api-ключ" //6ed44a4b-6543-4064-bebd-3029ebe6a1b9
-        const val ZOOM_BOUNDARY = 16.4f
+        const val MAPKIT_API_KEY = "3acec1e4-7330-400c-bbad-0e73b429e1ee\n"
     }
 }
